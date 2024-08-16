@@ -25,6 +25,7 @@
 
 #define EIR_NAME_SHORT 0x08  /* shortened local name */
 #define EIR_NAME_COMPLETE 0x09  /* complete local name */
+#define EIR_MANUFACTURER_SPECIFIC 0xFF  /* manufacturer specific data */
 
 #define HCI_MAX_EVENT_SIZE 260
 
@@ -69,6 +70,12 @@ static void eir_parse_name(uint8_t *eir, size_t eir_len, char *buf, size_t buf_l
                 memcpy(buf, &eir[offset + 2], name_len);
                 buf[name_len] = '\0'; // 确保字符串以 null 结尾
                 return;
+            case EIR_MANUFACTURER_SPECIFIC:
+                if (field_len >= 7 && eir[offset + 2] == 0x57 && eir[offset + 3] == 0x01 &&
+                    eir[offset + 4] == 0x02 && eir[offset + 5] == 0x02 && eir[offset + 6] == 0x01) {
+                    printf("Heart Rate: %d\n", eir[offset + 7]);
+                }
+                break;
             case 0x01: // Flags
                 printf("Flags: 0x%02x\n", eir[offset + 2]);
                 break;
@@ -164,7 +171,7 @@ int lescan(int dev_id, int argc, char **argv)
     uint8_t filter_policy = 0x00;
     uint16_t interval = htobs(0x0010);
     uint16_t window = htobs(0x0010);
-    uint8_t filter_dup = 0x01; //禁用重复过滤
+    uint8_t filter_dup = 0x00; //禁用重复过滤
 
     dd = hci_open_dev(dev_id);
     if (dd < 0) {
@@ -213,3 +220,4 @@ int main(int argc, char **argv)
 
     return lescan(dev_id, argc, argv);
 }
+
