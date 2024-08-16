@@ -7,7 +7,6 @@
 #include <string.h>     // 字符串处理库
 #include <sys/param.h>  // 系统参数
 #include <sys/socket.h> // 套接字库
-#include <signal.h>     // 信号处理库
 #include "bluetooth/bluetooth.h"  // 蓝牙库
 #include "bluetooth/hci.h"        // HCI（主机控制接口）库
 #include "bluetooth/hci_lib.h"    // HCI 库函数
@@ -32,15 +31,6 @@
 
 // HCI 最大事件大小
 #define HCI_MAX_EVENT_SIZE 260
-
-// 全局变量，用于接收信号
-static volatile int signal_received = 0;
-
-// 信号处理函数，用于处理 SIGINT 信号
-static void sigint_handler(int sig) 
-{
-    signal_received = sig; 
-}
 
 // 解析 EIR 数据中的名称
 static int eir_parse_name(uint8_t *eir, size_t eir_len, char *buf, size_t buf_len)
@@ -84,17 +74,14 @@ static int print_advertising_devices(int dd)
 {
     unsigned char buf[HCI_MAX_EVENT_SIZE], *ptr;
     struct hci_filter nf, of;
-    struct sigaction sa;
     socklen_t olen;
     int len;
-
     // 获取当前套接字选项
     olen = sizeof(of);
     if (getsockopt(dd, SOL_HCI, HCI_FILTER, &of, &olen) < 0) {
         printf("Could not get socket options\n");
         return -1;
     }
-
     // 设置新的 HCI 过滤器
     hci_filter_clear(&nf);
     hci_filter_set_ptype(HCI_EVENT_PKT, &nf);       // 设置数据包类型为事件数据包
@@ -103,37 +90,23 @@ static int print_advertising_devices(int dd)
         printf("Could not set socket options\n");
         return -1;
     }
-
-    // 设置信号处理函数
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_flags = SA_NOCLDSTOP;
-    sa.sa_handler = sigint_handler;
-    sigaction(SIGINT, &sa, NULL);
-
     // 循环读取广告数据
     while (1) {
         evt_le_meta_event *meta;
         le_advertising_info *info;
         char addr[18];
-
         // 读取数据
         while ((len = read(dd, buf, sizeof(buf))) < 0) {
-            if (errno == EINTR && signal_received == SIGINT) {
-                len = 0;
-                goto done;
-            }
             if (errno == EAGAIN || errno == EINTR)
                 continue;
             goto done;
         }
-
         // 解析数据
         ptr = buf + (1 + HCI_EVENT_HDR_SIZE);
         len -= (1 + HCI_EVENT_HDR_SIZE);
         meta = (evt_le_meta_event *) ptr;
         if (meta->subevent != 0x02)
             goto done;
-
         // 忽略多个报告
         info = (le_advertising_info *) (meta->data + 1);
         {

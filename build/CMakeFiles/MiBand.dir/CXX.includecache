@@ -25,8 +25,6 @@ sys/param.h
 -
 sys/socket.h
 -
-signal.h
--
 bluetooth/bluetooth.h
 /home/user/MiBand/bluetooth/bluetooth.h
 bluetooth/hci.h
