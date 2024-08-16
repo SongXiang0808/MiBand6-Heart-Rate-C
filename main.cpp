@@ -36,64 +36,39 @@ static void sigint_handler(int sig)
     signal_received = sig; 
 }
 
-static void eir_parse_name(uint8_t *eir, size_t eir_len, char *buf, size_t buf_len)
+static int eir_parse_name(uint8_t *eir, size_t eir_len, char *buf, size_t buf_len)
 {
     size_t offset = 0;
-
     while (offset < eir_len) {
         uint8_t field_len = eir[offset];
         size_t name_len;
-
         /* Check for the end of EIR */
         if (field_len == 0)
             break;
-
         if (offset + field_len > eir_len)
             goto failed;
-
-        printf("EIR field type: 0x%02x, field length: %d\n", eir[offset + 1], field_len); // 添加调试信息
-
-        // 打印EIR字段的内容
-        printf("EIR field data: ");
-        for (size_t i = 0; i < field_len; i++) {
-            printf("%02x ", eir[offset + i]);
-        }
-        printf("\n");
-
         switch (eir[offset + 1]) {
             case EIR_NAME_SHORT:
             case EIR_NAME_COMPLETE:
                 name_len = field_len - 1; 
                 if (name_len > buf_len)
                     goto failed;
-
                 memcpy(buf, &eir[offset + 2], name_len);
                 buf[name_len] = '\0'; // 确保字符串以 null 结尾
-                return;
+                return 0;
             case EIR_MANUFACTURER_SPECIFIC:
                 if (field_len >= 7 && eir[offset + 2] == 0x57 && eir[offset + 3] == 0x01 &&
                     eir[offset + 4] == 0x02 && eir[offset + 5] == 0x02 && eir[offset + 6] == 0x01) {
                     printf("Heart Rate: %d\n", eir[offset + 7]);
+                    return 1; // 找到心率数据
                 }
                 break;
-            case 0x01: // Flags
-                printf("Flags: 0x%02x\n", eir[offset + 2]);
-                break;
-            case 0x16: // Service Data
-                printf("Service Data: ");
-                for (size_t i = 2; i < field_len; i++) {
-                    printf("%02x ", eir[offset + 2 + i]);
-                }
-                printf("\n");
-                break;
-            // 你可以在这里添加更多的case来解析其他类型的EIR字段
         }
-
         offset += field_len + 1; 
     }
-
 failed:
     snprintf(buf, buf_len, "(unknown)");
+    return 0;
 }
 
 static int print_advertising_devices(int dd)
@@ -103,13 +78,11 @@ static int print_advertising_devices(int dd)
     struct sigaction sa;
     socklen_t olen;
     int len;
-
     olen = sizeof(of);
     if (getsockopt(dd, SOL_HCI, HCI_FILTER, &of, &olen) < 0) {
         printf("Could not get socket options\n");
         return -1;
     }
-
     hci_filter_clear(&nf);
     hci_filter_set_ptype(HCI_EVENT_PKT, &nf);       // hci数据包类型，此处设置为事件数据包
     hci_filter_set_event(EVT_LE_META_EVENT, &nf);   // hci事件数据包中具体事件类型。EVT_LE_META_EVENT为事件码。
@@ -117,17 +90,14 @@ static int print_advertising_devices(int dd)
         printf("Could not set socket options\n");
         return -1;
     }
-
     memset(&sa, 0, sizeof(sa));
     sa.sa_flags = SA_NOCLDSTOP;
     sa.sa_handler = sigint_handler;
     sigaction(SIGINT, &sa, NULL);
-
     while (1) {
         evt_le_meta_event *meta;
         le_advertising_info *info;
         char addr[18];
-
         while ((len = read(dd, buf, sizeof(buf))) < 0) {
             if (errno == EINTR && signal_received == SIGINT) {
                 len = 0;
@@ -137,25 +107,22 @@ static int print_advertising_devices(int dd)
                 continue;
             goto done;
         }
-
         ptr = buf + (1 + HCI_EVENT_HDR_SIZE);
         len -= (1 + HCI_EVENT_HDR_SIZE);
         meta = (evt_le_meta_event *) ptr;
         if (meta->subevent != 0x02)
             goto done;
-
         /* Ignoring multiple reports */
         info = (le_advertising_info *) (meta->data + 1);
         {
             char name[248];
             memset(name, 0, sizeof(name));
             ba2str(&info->bdaddr, addr);
-            printf("EIR Data Length: %d\n", info->length); // 添加调试信息
-            eir_parse_name(info->data, info->length, name, sizeof(name) - 1);
-            printf("%s %s\n", addr, name);
+            if (eir_parse_name(info->data, info->length, name, sizeof(name) - 1)) {
+                printf("%s %s\n", addr, name);
+            }
         }
     }
-
 done:
     setsockopt(dd, SOL_HCI, HCI_FILTER, &of, sizeof(of));
     if (len < 0)
@@ -220,4 +187,3 @@ int main(int argc, char **argv)
 
     return lescan(dev_id, argc, argv);
 }
-
