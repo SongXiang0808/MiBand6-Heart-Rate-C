@@ -1,0 +1,36 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/user/MiBand/main.cpp
+stdio.h
+-
+errno.h
+-
+ctype.h
+-
+fcntl.h
+-
+unistd.h
+-
+stdlib.h
+-
+string.h
+-
+sys/param.h
+-
+sys/socket.h
+-
+signal.h
+-
+bluetooth/bluetooth.h
+/home/user/MiBand/bluetooth/bluetooth.h
+bluetooth/hci.h
+/home/user/MiBand/bluetooth/hci.h
+bluetooth/hci_lib.h
+/home/user/MiBand/bluetooth/hci_lib.h
+

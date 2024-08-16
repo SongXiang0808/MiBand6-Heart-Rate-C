@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/home/user/MiBand/build",
+  "command": "/opt/remi-sdk/sysroots/x86_64-pokysdk-linux/usr/bin/aarch64-poky-linux/aarch64-poky-linux-g++ --sysroot=/opt/remi-sdk/sysroots/aarch64-poky-linux    -O2 -pipe -g -feliminate-unused-debug-types  -o0 -Wall -g -ggdb   -o CMakeFiles/MiBand.dir/main.cpp.o -c /home/user/MiBand/main.cpp",
+  "file": "/home/user/MiBand/main.cpp"
+}
+]
