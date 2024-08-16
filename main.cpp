@@ -183,6 +183,13 @@ int lescan(int dev_id, int argc, char **argv)
 // 主函数
 int main(int argc, char **argv)
 {
+    // 重置蓝牙
+    int reset_result = system("hciconfig hci0 reset");
+    if (reset_result != 0) {
+        perror("Failed to reset Bluetooth adapter");
+        return 1;
+    }
+    
     // 获取蓝牙适配器的设备 ID
     int dev_id = hci_get_route(NULL);
     if (dev_id < 0) {
