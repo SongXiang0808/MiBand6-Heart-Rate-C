@@ -8,7 +8,6 @@
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <signal.h>
-
 #include "bluetooth/bluetooth.h"
 #include "bluetooth/hci.h"
 #include "bluetooth/hci_lib.h"
@@ -27,7 +26,10 @@
 #define EIR_NAME_SHORT 0x08  /* shortened local name */
 #define EIR_NAME_COMPLETE 0x09  /* complete local name */
 
+#define HCI_MAX_EVENT_SIZE 260
+
 static volatile int signal_received = 0;
+
 static void sigint_handler(int sig) 
 {
     signal_received = sig; 
@@ -38,7 +40,7 @@ static void eir_parse_name(uint8_t *eir, size_t eir_len, char *buf, size_t buf_l
     size_t offset = 0;
 
     while (offset < eir_len) {
-        uint8_t field_len = eir[0];
+        uint8_t field_len = eir[offset];
         size_t name_len;
 
         /* Check for the end of EIR */
@@ -48,19 +50,39 @@ static void eir_parse_name(uint8_t *eir, size_t eir_len, char *buf, size_t buf_l
         if (offset + field_len > eir_len)
             goto failed;
 
-        switch (eir[1]) {
+        printf("EIR field type: 0x%02x, field length: %d\n", eir[offset + 1], field_len); // 添加调试信息
+
+        // 打印EIR字段的内容
+        printf("EIR field data: ");
+        for (size_t i = 0; i < field_len; i++) {
+            printf("%02x ", eir[offset + i]);
+        }
+        printf("\n");
+
+        switch (eir[offset + 1]) {
             case EIR_NAME_SHORT:
             case EIR_NAME_COMPLETE:
                 name_len = field_len - 1; 
                 if (name_len > buf_len)
                     goto failed;
 
-                memcpy(buf, &eir[2], name_len);
+                memcpy(buf, &eir[offset + 2], name_len);
+                buf[name_len] = '\0'; // 确保字符串以 null 结尾
                 return;
+            case 0x01: // Flags
+                printf("Flags: 0x%02x\n", eir[offset + 2]);
+                break;
+            case 0x16: // Service Data
+                printf("Service Data: ");
+                for (size_t i = 2; i < field_len; i++) {
+                    printf("%02x ", eir[offset + 2 + i]);
+                }
+                printf("\n");
+                break;
+            // 你可以在这里添加更多的case来解析其他类型的EIR字段
         }
 
         offset += field_len + 1; 
-        eir += field_len + 1; 
     }
 
 failed:
@@ -82,9 +104,8 @@ static int print_advertising_devices(int dd)
     }
 
     hci_filter_clear(&nf);
-    hci_filter_set_ptype(HCI_EVENT_PKT, &nf);       //hci数据包类型，此处设置为事件数据包
-    hci_filter_set_event(EVT_LE_META_EVENT, &nf);   //hci事件数据包中具体事件类型。EVT_LE_META_EVENT为事件码。
-
+    hci_filter_set_ptype(HCI_EVENT_PKT, &nf);       // hci数据包类型，此处设置为事件数据包
+    hci_filter_set_event(EVT_LE_META_EVENT, &nf);   // hci事件数据包中具体事件类型。EVT_LE_META_EVENT为事件码。
     if (setsockopt(dd, SOL_HCI, HCI_FILTER, &nf, sizeof(nf)) < 0) {
         printf("Could not set socket options\n");
         return -1;
@@ -105,7 +126,6 @@ static int print_advertising_devices(int dd)
                 len = 0;
                 goto done;
             }
-
             if (errno == EAGAIN || errno == EINTR)
                 continue;
             goto done;
@@ -113,33 +133,26 @@ static int print_advertising_devices(int dd)
 
         ptr = buf + (1 + HCI_EVENT_HDR_SIZE);
         len -= (1 + HCI_EVENT_HDR_SIZE);
-
         meta = (evt_le_meta_event *) ptr;
-
         if (meta->subevent != 0x02)
             goto done;
 
         /* Ignoring multiple reports */
         info = (le_advertising_info *) (meta->data + 1);
         {
-            char name[30];
-
+            char name[248];
             memset(name, 0, sizeof(name));
-
             ba2str(&info->bdaddr, addr);
-            eir_parse_name(info->data, info->length,
-                            name, sizeof(name) - 1);
-
+            printf("EIR Data Length: %d\n", info->length); // 添加调试信息
+            eir_parse_name(info->data, info->length, name, sizeof(name) - 1);
             printf("%s %s\n", addr, name);
         }
     }
 
 done:
     setsockopt(dd, SOL_HCI, HCI_FILTER, &of, sizeof(of));
-
     if (len < 0)
         return -1;
-
     return 0;
 }
 
@@ -151,7 +164,7 @@ int lescan(int dev_id, int argc, char **argv)
     uint8_t filter_policy = 0x00;
     uint16_t interval = htobs(0x0010);
     uint16_t window = htobs(0x0010);
-    uint8_t filter_dup = 0x01;
+    uint8_t filter_dup = 0x01; //禁用重复过滤
 
     dd = hci_open_dev(dev_id);
     if (dd < 0) {
