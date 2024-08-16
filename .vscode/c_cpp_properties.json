@@ -6,7 +6,11 @@
             "cppStandard": "c++11",
             "compileCommands": "${workspaceFolder}/build/compile_commands.json",
             "intelliSenseMode": "gcc-x64",
-            "configurationProvider": "ms-vscode.cmake-tools"
+            "configurationProvider": "ms-vscode.cmake-tools",
+            "includePath": [
+                "${default}",
+                "/opt/remi-sdk/sysroots/aarch64-poky-linux/usr/include"
+            ]
         }
     ],
     "version": 4
